@@ -543,6 +543,8 @@ guess_compiler(const char *path)
 		result = GUESSED_NVCC;
 	} else if (str_eq(name, "pump") || str_eq(name, "distcc-pump")) {
 		result = GUESSED_PUMP;
+	} else if (str_eq(name, "cl.exe")){
+		result = GUESSED_CL;
 	}
 	free(name);
 	return result;
@@ -1329,13 +1331,26 @@ update_cached_result_globals(struct file_hash *hash)
 	free(object_name);
 }
 
+//TODO this is moronic
+static void add_output_object_flag(struct args *args, char* obj_name){
+	size_t len = strlen(obj_name);
+	char * buff = x_malloc(len + 4);
+	strcpy(buff, "/Fo");
+	strcat(buff, obj_name);
+	args_add(args, buff);
+	free(buff);
+}
 // Run the real compiler and put the result in cache.
 static void
 to_cache(struct args *args, struct hash *depend_mode_hash)
 {
+	if(guessed_compiler == GUESSED_CL){
+		add_output_object_flag(args, output_obj);
+
+	} else {
 	args_add(args, "-o");
 	args_add(args, output_obj);
-
+	}
 	if (conf->hard_link) {
 		x_unlink(output_obj);
 	}
@@ -1403,7 +1418,7 @@ to_cache(struct args *args, struct hash *depend_mode_hash)
 
 	// distcc-pump outputs lines like this:
 	// __________Using # distcc servers in pump mode
-	if (st.st_size != 0 && guessed_compiler != GUESSED_PUMP) {
+	if (st.st_size != 0 && guessed_compiler != GUESSED_PUMP && guessed_compiler != GUESSED_CL) {
 		cc_log("Compiler produced stdout");
 		stats_update(STATS_STDOUT);
 		tmp_unlink(tmp_stdout);
@@ -2380,6 +2395,16 @@ detect_pch(const char *option, const char *arg, bool *found_pch)
 	return true;
 }
 
+static void
+rewrite_msvc_args(struct args *args){
+	int i = 1;
+	for(;i < args->argc; ++i){
+		if(args->argv[i][0] == '/'){
+			args->argv[i][0] = '-';
+		}
+	}
+}
+
 // Process the compiler options into options suitable for passing to the
 // preprocessor and the real compiler. The preprocessor options don't include
 // -E; this is added later. Returns true on success, otherwise false.
@@ -2612,6 +2637,9 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 			output_obj = make_relative_path(x_strdup(&argv[i][2]));
 			continue;
 		}
+		if( guessed_compiler == GUESSED_CL && str_startswith(argv[i], "-Fo")){
+			output_obj = make_relative_path(x_strdup(&argv[i][3]));
+		}
 
 		if (str_startswith(argv[i], "-fdebug-prefix-map=")
 		    || str_startswith(argv[i], "-ffile-prefix-map=")) {
@@ -2645,7 +2673,7 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 
 		// These options require special handling, because they behave differently
 		// with gcc -E, when the output file is not specified.
-		if (str_eq(argv[i], "-MD") || str_eq(argv[i], "-MMD")) {
+		if ((str_eq(argv[i], "-MD") || str_eq(argv[i], "-MMD")) && guessed_compiler != GUESSED_CL) {
 			generating_dependencies = true;
 			args_add(dep_args, argv[i]);
 			continue;
@@ -3640,6 +3668,10 @@ ccache(int argc, char *argv[])
 
 	guessed_compiler = guess_compiler(orig_args->argv[0]);
 
+	// if we are CL, rewrite the arguments
+	if(guessed_compiler == GUESSED_CL){
+		rewrite_msvc_args(orig_args);
+	}
 	// Arguments (except -E) to send to the preprocessor.
 	struct args *preprocessor_args;
 	// Arguments to send to the real compiler.
