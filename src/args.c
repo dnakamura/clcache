@@ -211,6 +211,24 @@ args_add(struct args *args, const char *s)
 	args->argv[args->argc] = NULL;
 }
 
+void
+args_addf(struct args *args, const char *format, ...){
+	va_list arglist1, arglist2;
+	va_start(arglist1, format);
+	va_copy(arglist2, arglist1);
+	char *buff = NULL;
+	int sz = vsnprintf(NULL, 0, format, arglist1);
+	assert(sz > 0);
+	buff = (char*) x_malloc(sz + 1);
+	vsnprintf(buff, sz + 1, format, arglist2);
+
+	args->argv = (char **)x_realloc(args->argv,
+	                                (args->argc + 2) * sizeof(char *));
+	args->argv[args->argc] = buff;
+	args->argc++;
+	args->argv[args->argc] = NULL;
+}
+
 // Add all arguments in to_append to args.
 void
 args_extend(struct args *args, struct args *to_append)

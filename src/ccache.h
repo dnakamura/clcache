@@ -129,6 +129,7 @@ struct args *args_init_from_gcc_atfile(const char *filename);
 struct args *args_copy(struct args *args);
 void args_free(struct args *args);
 void args_add(struct args *args, const char *s);
+void args_addf(struct args *args, const char *format, ...);
 void args_add_prefix(struct args *args, const char *s);
 void args_extend(struct args *args, struct args *to_append);
 void args_insert(struct args *dest, int index, struct args *src, bool replace);

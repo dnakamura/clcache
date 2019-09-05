@@ -1331,25 +1331,15 @@ update_cached_result_globals(struct file_hash *hash)
 	free(object_name);
 }
 
-//TODO this is moronic
-static void add_output_object_flag(struct args *args, char* obj_name){
-	size_t len = strlen(obj_name);
-	char * buff = x_malloc(len + 4);
-	strcpy(buff, "/Fo");
-	strcat(buff, obj_name);
-	args_add(args, buff);
-	free(buff);
-}
 // Run the real compiler and put the result in cache.
 static void
 to_cache(struct args *args, struct hash *depend_mode_hash)
 {
 	if(guessed_compiler == GUESSED_CL){
-		add_output_object_flag(args, output_obj);
-
+		args_addf(args, "/Fo%s", output_obj);
 	} else {
-	args_add(args, "-o");
-	args_add(args, output_obj);
+		args_add(args, "-o");
+		args_add(args, output_obj);
 	}
 	if (conf->hard_link) {
 		x_unlink(output_obj);
@@ -3016,24 +3006,26 @@ cc_process_args(struct args *args, struct args **preprocessor_args,
 
 		// Same as above but options with concatenated argument beginning with a
 		// slash.
-		if (argv[i][0] == '-') {
-			char *slash_pos = strchr(argv[i], '/');
-			if (slash_pos) {
-				char *option = x_strndup(argv[i], slash_pos - argv[i]);
-				if (compopt_takes_concat_arg(option) && compopt_takes_path(option)) {
-					char *relpath = make_relative_path(x_strdup(slash_pos));
-					char *new_option = format("%s%s", option, relpath);
-					if (compopt_affects_cpp(option)) {
-						args_add(cpp_args, new_option);
+		if(guessed_compiler != GUESSED_CL){
+			if (argv[i][0] == '-') {
+				char *slash_pos = strchr(argv[i], '/');
+				if (slash_pos) {
+					char *option = x_strndup(argv[i], slash_pos - argv[i]);
+					if (compopt_takes_concat_arg(option) && compopt_takes_path(option)) {
+						char *relpath = make_relative_path(x_strdup(slash_pos));
+						char *new_option = format("%s%s", option, relpath);
+						if (compopt_affects_cpp(option)) {
+							args_add(cpp_args, new_option);
+						} else {
+							args_add(stripped_args, new_option);
+						}
+						free(new_option);
+						free(relpath);
+						free(option);
+						continue;
 					} else {
-						args_add(stripped_args, new_option);
+						free(option);
 					}
-					free(new_option);
-					free(relpath);
-					free(option);
-					continue;
-				} else {
-					free(option);
 				}
 			}
 		}
